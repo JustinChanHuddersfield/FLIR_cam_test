@@ -11,41 +11,42 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using SpinnakerNET;
 using SpinnakerNET.GenApi;
+using System.Windows.Media.Converters;
 
 namespace FLIRcamTest
     {
     public class FLIR : Cameras
         {
-        //cam cam;
-        
+        IManagedCamera cam;
+        ManagedCameraList camList;
+        ManagedInterfaceList interfaceList;
+        ManagedSystem System;
+
         // Setting the properties
         public bool IsConnected { get; private set; } = false;
-
         public bool IsBitDepthChangeImplemented { get; private set; } = true;
-
         public string deviceModel { get; private set; } = "";
-
         public float exposureUs { get; private set; }
-
         private readonly float _exposureMinUs = 56;
-
         private readonly float _exposureMaxUs = 10000;
-
         public uint width { get; private set; }
-
         public uint height { get; private set; }
-
         public uint bitDepth { get; private set; }
+
+        //public 
 
 
         public void Connect()
             {
-            int startCam(IManagedCamera cam)
-                {
+            //cam = new IManagedCamera();
+
+            //Referencing Acquisition_CSharp.cs example from Spinnaker SDK
+            //int startCam(IManagedCamera cam)
+                //{
                 int result = 0;
                 int level = 0;
 
-                // Following drawn from NodMapInfo_CSharp.cs example from Teledyne SDK
+                // Following drawn from NodMapInfo_CSharp.cs example from Spinnaker SDK
                 try
                     {
                     // RetrieveTL stream nodemap (immutable info of camera, serial number, vendor, model)
@@ -62,14 +63,27 @@ namespace FLIRcamTest
 
                     result = result | printCategoryNodeAndAllFeatures(nodeMapTLStream.GetNode<ICategory>("Root"), level);
 
+                    // Retrieve TL device nodemap and print device information
+                    INodeMap nodeMapTLDevice = cam.GetTLDeviceNodeMap();
+
+                    result = PrintDeviceInfo(nodeMapTLDevice);
+
                     // Initialise camera
-                    Console.WriteLine("*** PRINTING GENICAM NODEMAP ***\n");
                     cam.Init();
 
                     // Retrieve GenICam nodemap (to configure camera -> image height, width, enable/ disable trigger mode
-                    INodeMap appLayerNodeMap = cam.GetNodeMap();
+                    Console.WriteLine("*** PRINTING GENICAM NODEMAP ***\n");
+
+                    //INodeMap appLayerNodeMap = cam.GetNodeMap();
+                    INodeMap nodeMap = cam.GetNodeMap();
 
                     result = result | printCategoryNodeAndAllFeatures(appLayerNodeMap.GetNode<ICategory>("Root"), level);
+
+                    // Acquire images
+                    result = result | AcquireImages(cam, nodeMap, nodeMapTLDevice);
+
+                    // End acquisition
+                    cam.EndAcquisition();
 
                     // Deinitialise camera
                     cam.DeInit();
@@ -85,8 +99,8 @@ namespace FLIRcamTest
 
                 return result;
 
-                }
-
+                //}
+            // combine the following variable QueryInterface with the above startCam
             int QueryInterface(IManagedInterface managedInterface)
                 {
                 int result = 0;
@@ -98,7 +112,7 @@ namespace FLIRcamTest
                     // Print interface display name (1. node is distinguished by type, related to its value's data type;
                     // 2. nodes to be checked for availability & read/writability prior to attempt to read or write)
                     IString iInterfaceDisplayName = nodeMapInterface.GetNode<IString>("InterfaceDisplayName");
-
+                    
                     if (iInterfaceDisplayName != null && iInterfaceDisplayName.IsReadable)
                         {
                         string interfaceDisplayName = iInterfaceDisplayName.Value;
@@ -166,10 +180,12 @@ namespace FLIRcamTest
                 return -1;
             }
 
+            // why doesn't ximea cam code from James need to call on functions from within the corresponding SDK??
         public void Disconnect()
             {
             //cam.StopAcquisition();
             //cam.CloseDevice();
+            cam.EndAcquisition(); 
             cam.Dispose();
             camList.Clear();
             interfaceList.Clear();
@@ -183,7 +199,9 @@ namespace FLIRcamTest
             {
             try
                 {
-                cam.GetImage(out image, 1000);
+                //cam.GetImage(out image, 1000);
+                cam.AcquireImages(out image, 1000);
+
                 return image;
                 }
             catch (Exception ex) { throw ex; }
@@ -193,18 +211,20 @@ namespace FLIRcamTest
             {
             try
                 {
-                cam.GetImage(out byte[] byteArrayIn, 1000);
+                //cam.GetImage(out byte[] byteArrayIn, 1000);
+                cam.AcquireImages(out byte[] byteArrayIn 1000);
                 return byteArrayIn;
                 }
             catch (Exception ex) { throw ex; }
             }
 
-        // yet to further investigate this _method_
+        // yet to further investigate & edit this _method_
         public void UpdateParameters()
             {
             throw new NotImplementedException();
             }
 
+        // yet to further investigate & edit this _method_
         public void SetExposure(float exposure)
             {
             if (exposure < _exposureMinUs)
@@ -228,11 +248,13 @@ namespace FLIRcamTest
                 }
             }
 
+        // yet to further investigate & edit this _method_
         public void SetBitDepth(uint bitDepthToSet)
             {
             throw new NotImplementedException();
             }
-
+        
+        // yet to further investigate & edit this _method_
         public void SaveSnapshot(string filePath)
             {
             try
