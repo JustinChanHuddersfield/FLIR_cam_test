@@ -12,15 +12,21 @@ using System.Windows.Media.Imaging;
 using SpinnakerNET;
 using SpinnakerNET.GenApi;
 using System.Windows.Media.Converters;
+using Spinnaker;
 
 namespace FLIRcamTest
     {
     public class FLIR : Cameras
         {
-        IManagedCamera cam;
-        ManagedCameraList camList;
-        ManagedInterfaceList interfaceList;
-        ManagedSystem System;
+        private INodeMap nodeMap;
+        private INodeMap nodeMapTLDevice;
+        //Camera camX;
+        //private ManagedCamera cam;  // the class version, relating directly under the SDK's class
+        private IManagedCamera cam; // the interface version as used in Spinnaker SDK exampels
+        private ManagedCameraList camList;
+        private ManagedInterfaceList interfaceList;
+        private ManagedSystem system;
+        //ManagedInterface 
 
         // Setting the properties
         public bool IsConnected { get; private set; } = false;
@@ -38,13 +44,14 @@ namespace FLIRcamTest
 
         public void Connect()
             {
-            //cam = new IManagedCamera();
+            //camX = new Camera();
 
             //Referencing Acquisition_CSharp.cs example from Spinnaker SDK
             //int startCam(IManagedCamera cam)
-                //{
+            //{
+
                 int result = 0;
-                int level = 0;
+                int level = 0;    
 
                 // Following drawn from NodMapInfo_CSharp.cs example from Spinnaker SDK
                 try
@@ -73,7 +80,6 @@ namespace FLIRcamTest
 
                     // Retrieve GenICam nodemap (to configure camera -> image height, width, enable/ disable trigger mode
                     Console.WriteLine("*** PRINTING GENICAM NODEMAP ***\n");
-
                     //INodeMap appLayerNodeMap = cam.GetNodeMap();
                     INodeMap nodeMap = cam.GetNodeMap();
 
@@ -87,7 +93,6 @@ namespace FLIRcamTest
 
                     // Deinitialise camera
                     cam.DeInit();
-
                     cam.Dispose();
 
                     }
@@ -96,10 +101,8 @@ namespace FLIRcamTest
                         Console.WriteLine("Error: {0}", ex.Message);
                         result = -1;
                     }
+                
 
-                return result;
-
-                //}
             // combine the following variable QueryInterface with the above startCam
             int QueryInterface(IManagedInterface managedInterface)
                 {
@@ -167,32 +170,21 @@ namespace FLIRcamTest
                 
 
                 return result;
-                }
-            }
 
-        // Retrieve the desired entry node from the enumeration node
-        // We can populate the entry name with symbolic of the desired stream mode
-        IEnumEntry iStreamModeCustom = iStreamMode.GetEntryByName(streamMode);
-            if (iStreamModeCustom == null || !iStreamModeCustom.IsReadable)
-            {
-                // Failed to get custom stream mode
-                Console.WriteLine("Custom stream mode is not available...");
-                return -1;
+
+                }
+            cam.BeginAcquisition();
+
             }
 
             // why doesn't ximea cam code from James need to call on functions from within the corresponding SDK??
         public void Disconnect()
             {
-            //cam.StopAcquisition();
-            //cam.CloseDevice();
             cam.EndAcquisition(); 
             cam.Dispose();
             camList.Clear();
             interfaceList.Clear();
             system.Dispose();
-            
-
-
             }
 
         public WriteableBitmap CaptureImage(WriteableBitmap image)
@@ -200,25 +192,71 @@ namespace FLIRcamTest
             try
                 {
                 //cam.GetImage(out image, 1000);
-                cam.AcquireImages(out image, 1000);
+                cam.BeginAcquisition();
+                cam.GetNextImage();
 
                 return image;
                 }
             catch (Exception ex) { throw ex; }
             }
 
+        //public byte[] CaptureImage()
+        //    {
+        //    try
+        //        {
+        //        //cam.GetImage(out byte[] byteArrayIn, 1000);
+        //        cam.BeginAcquisition();
+
+        //        return byteArrayIn;
+        //        }
+        //    catch (Exception ex) { throw ex; }
+        //    }
+
         public byte[] CaptureImage()
             {
+            //IManagedImage camImageUlong = new ManagedImage();
             try
                 {
-                //cam.GetImage(out byte[] byteArrayIn, 1000);
-                cam.AcquireImages(out byte[] byteArrayIn 1000);
-                return byteArrayIn;
+                // Retrieve enumeration node from nodemap
+                IEnum iAcquisitionMode = nodeMap.GetNode<IEnum>("AcquisitionMode");
+                // Retrieve entry node from enumeration node
+                IEnumEntry iAcquisitionModeContinuous = iAcquisitionMode.GetEntryByName("Continuous");
+                // Set symbolic from entry node as new value for enumeration node
+                iAcquisitionMode.Value = iAcquisitionModeContinuous.Symbolic;
+                
+                cam.BeginAcquisition();
+                String deviceSerialNumber = "";
+                IString iDeviceSerialNumber = nodeMapTLDevice.GetNode<IString>("DeviceSerialNumber");
+                deviceSerialNumber = iDeviceSerialNumber.Value;
+
+                // Set default image processor color processing method
+                processor.SetColorProcessing(ColorProcessingAlgorithm.HQ_LINEAR);
+                // Create ImageProcessor instance for post processing images
+                IManagedImageProcessor processor = new ManagedImageProcessor();
+                using (IManagedImage rawImage = cam.GetNextImage(1000))
+                    {
+                    if (rawImage.IsIncomplete)
+                        {
+                        Console.WriteLine("Image incomplete: image status {0}...", rawImage.ImageStatus);
+                        }
+                    else
+                        {
+                        uint width = rawImage.Width;
+                        uint height = rawImage.Height;
+
+                        // convert image to mono8
+                        IManagedImage convertedImage = processor.Convert(rawImage, PixelFormatEnums.Mono8);
+                        return convertedImage;
+                        }
+                    
+                    }
+
+                return convertedImage;
                 }
-            catch (Exception ex) { throw ex; }
+
+            catch (SpinnakerException ex) { throw ex; }
             }
 
-        // yet to further investigate & edit this _method_
         public void UpdateParameters()
             {
             throw new NotImplementedException();
@@ -260,7 +298,7 @@ namespace FLIRcamTest
             try
                 {
                 WriteableBitmap image;
-                cam.GetImage(out image, 1000);
+                cam.GetNextImage(1000);
 
 
                 using (FileStream stream =

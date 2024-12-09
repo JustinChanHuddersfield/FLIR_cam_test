@@ -20,6 +20,7 @@ namespace FLIRcamTest
 
         byte[] CaptureImage();
 
+        //byte[] CaptureImage(ulong image); // added for Spinnaker SDK camera
 
         void SetExposure(float exposureUs);
 
