@@ -58,21 +58,16 @@ namespace FLIRcamTest
                     {
                     // RetrieveTL stream nodemap (immutable info of camera, serial number, vendor, model)
                     Console.WriteLine("\n*** Printing TL Device NodeMap ***\n");
-
                     INodeMap genTLNodeMap = cam.GetTLDeviceNodeMap();
-
                     result = printCategoryNodeAndAllFeatures(genTLNodeMap.GetNode<ICategory>("Root"), level);
 
                     // Retrieve TL stream nodemap (provide info on streaming performance)
                     Console.WriteLine("*** PRINTING TL STREAM NODEMAP ***\n");
-
                     INodeMap nodeMapTLStream = cam.GetTLStreamNodeMap();
-
                     result = result | printCategoryNodeAndAllFeatures(nodeMapTLStream.GetNode<ICategory>("Root"), level);
 
                     // Retrieve TL device nodemap and print device information
                     INodeMap nodeMapTLDevice = cam.GetTLDeviceNodeMap();
-
                     result = PrintDeviceInfo(nodeMapTLDevice);
 
                     // Initialise camera
@@ -82,7 +77,6 @@ namespace FLIRcamTest
                     Console.WriteLine("*** PRINTING GENICAM NODEMAP ***\n");
                     //INodeMap appLayerNodeMap = cam.GetNodeMap();
                     INodeMap nodeMap = cam.GetNodeMap();
-
                     result = result | printCategoryNodeAndAllFeatures(appLayerNodeMap.GetNode<ICategory>("Root"), level);
 
                     // Acquire images
@@ -229,10 +223,11 @@ namespace FLIRcamTest
                 IString iDeviceSerialNumber = nodeMapTLDevice.GetNode<IString>("DeviceSerialNumber");
                 deviceSerialNumber = iDeviceSerialNumber.Value;
 
-                // Set default image processor color processing method
-                processor.SetColorProcessing(ColorProcessingAlgorithm.HQ_LINEAR);
                 // Create ImageProcessor instance for post processing images
                 IManagedImageProcessor processor = new ManagedImageProcessor();
+                // Set default image processor color processing method
+                processor.SetColorProcessing(ColorProcessingAlgorithm.HQ_LINEAR);
+                
                 using (IManagedImage rawImage = cam.GetNextImage(1000))
                     {
                     if (rawImage.IsIncomplete)
@@ -245,13 +240,22 @@ namespace FLIRcamTest
                         uint height = rawImage.Height;
 
                         // convert image to mono8
-                        IManagedImage convertedImage = processor.Convert(rawImage, PixelFormatEnums.Mono8);
-                        return convertedImage;
+                        using (IManagedImage convertedImage = processor.Convert(rawImage, PixelFormatEnums.Mono8))
+                            {
+                            String filename = "c#image-";
+                            if (deviceSerialNumber != "")
+                                {
+                                filename = filename + deviceSerialNumber;
+                                }
+                            filename = filename + ".jpg";
+                            convertedImage.Save(filename);
+                            }
+
                         }
                     
                     }
 
-                return convertedImage;
+                
                 }
 
             catch (SpinnakerException ex) { throw ex; }
@@ -277,7 +281,7 @@ namespace FLIRcamTest
                 exposureUs = exposure;
                 cam.SetParam(PRM.EXPOSURE, exposureUs);
                 Thread.Sleep(50);
-                cam.GetParam(PRM.EXPOSURE, out float tempExp); // because the value actually set will be slightly different.
+                cam.GetAccessMode(PRM.EXPOSURE, out float tempExp); // because the value actually set will be slightly different.
                 exposureUs = tempExp;
                 }
             catch (System.ApplicationException appExc)
@@ -292,25 +296,25 @@ namespace FLIRcamTest
             throw new NotImplementedException();
             }
         
-        // yet to further investigate & edit this _method_
+        // not sure if GetNextImage gets the right image format
         public void SaveSnapshot(string filePath)
-            {
+        {
             try
-                {
+            {
                 WriteableBitmap image;
                 cam.GetNextImage(1000);
 
 
                 using (FileStream stream =
             new FileStream(filePath, FileMode.Create))
-                    {
+                {
                     PngBitmapEncoder encoder = new PngBitmapEncoder();
                     encoder.Frames.Add(BitmapFrame.Create(image));
                     encoder.Save(stream);
-                    }
                 }
-            catch (Exception ex) { throw ex; }
             }
+            catch (Exception ex) { throw ex; }
+        }
 
         ~FLIR()   // destructor to free up resources
             {
