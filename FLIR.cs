@@ -26,6 +26,7 @@ namespace FLIRcamTest
         private ManagedCameraList camList;
         private ManagedInterfaceList interfaceList;
         private ManagedSystem system;
+        
         //ManagedInterface 
 
         // Setting the properties
@@ -51,11 +52,29 @@ namespace FLIRcamTest
             //{
 
                 int result = 0;
-                int level = 0;    
+                int level = 0;
+
+                FileStream fileStream;
 
                 // Following drawn from NodMapInfo_CSharp.cs example from Spinnaker SDK
                 try
                     {
+                    // check if permission to write to folder == True
+                    try
+                        {
+                        fileStream = new FileStream(@"fsTest.txt", FileMode.Create);
+                        fileStream.Close();
+                        File.Delete("fsTest.txt");
+                        }
+                    catch
+                        {
+                        Console.WriteLine("Failed to write to current folder, please check permissions.");
+                        Console.WriteLine("Press Enter to exit.");
+                        Console.ReadLine();
+                        return -1;
+                        }
+                        
+
                     // RetrieveTL stream nodemap (immutable info of camera, serial number, vendor, model)
                     Console.WriteLine("\n*** Printing TL Device NodeMap ***\n");
                     INodeMap genTLNodeMap = cam.GetTLDeviceNodeMap();
@@ -100,7 +119,7 @@ namespace FLIRcamTest
             // combine the following variable QueryInterface with the above startCam
             int QueryInterface(IManagedInterface managedInterface)
                 {
-                int result = 0;
+                int resultQuery = 0;
 
                 try
                     {
@@ -109,7 +128,7 @@ namespace FLIRcamTest
                     // Print interface display name (1. node is distinguished by type, related to its value's data type;
                     // 2. nodes to be checked for availability & read/writability prior to attempt to read or write)
                     IString iInterfaceDisplayName = nodeMapInterface.GetNode<IString>("InterfaceDisplayName");
-                    
+
                     if (iInterfaceDisplayName != null && iInterfaceDisplayName.IsReadable)
                         {
                         string interfaceDisplayName = iInterfaceDisplayName.Value;
@@ -156,14 +175,15 @@ namespace FLIRcamTest
                         camList.Clear();
 
                         }
+                    }
                 catch (SpinnakerException ex)
                     {
                     Console.WriteLine("Error " + ex.Message);
-                    result = -1;
+                    resultQuery = -1;
                     }
                 
 
-                return result;
+                return resultQuery;
 
 
                 }
@@ -279,10 +299,21 @@ namespace FLIRcamTest
             try
                 {
                 exposureUs = exposure;
-                cam.SetParam(PRM.EXPOSURE, exposureUs);
+                // acquire auto exposure mode
+                IEnum iExposureAuto = nodeMap.GetNode<IEnum>("ExposureAuto");
+                // turn auto exposure mode to OFF
+                IEnumEntry iExposureAutoOff = iExposureAuto.GetEntryByName("Off");
+                iExposureAuto.Value = iExposureAutoOff.Value;
+                //// set exposure time manually
+                //cam.SetParam(PRM.EXPOSURE, exposureUs);   // adapt this line then delete
+                IFloat iExposureTime = nodeMap.GetNode<IFloat>("ExposureTime");
                 Thread.Sleep(50);
-                cam.GetAccessMode(PRM.EXPOSURE, out float tempExp); // because the value actually set will be slightly different.
-                exposureUs = tempExp;
+                // ensure eposure time set under max & min limit (if...else)
+                iExposureTime.Value = (exposureUs > _exposureMaxUs ? _exposureMaxUs : exposureUs < _exposureMinUs ? _exposureMinUs: exposureUs);
+                // convert from double to float
+                float expoTime = (float) iExposureTime.Value;
+                exposureUs = expoTime;
+                
                 }
             catch (System.ApplicationException appExc)
                 {
