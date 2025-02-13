@@ -13,19 +13,23 @@ using SpinnakerNET;
 using SpinnakerNET.GenApi;
 using System.Windows.Media.Converters;
 using Spinnaker;
+using System.Windows.Media.Media3D;
+using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
 
+// https://flir.custhelp.com/app/answers/detail/a_id/4327/~/flir-spinnaker-sdk---getting-started-with-the-spinnaker-sdk
 namespace FLIRcamTest
     {
     public class FLIR : Cameras
         {
+        //FLIR cam;
         private INodeMap nodeMap;
         private INodeMap nodeMapTLDevice;
-        //Camera camX;
-        //private ManagedCamera cam;  // the class version, relating directly under the SDK's class
+        //private readonly ManagedCamera cam;  // the class version, relating directly under the SDK's class
         private IManagedCamera cam; // the interface version as used in Spinnaker SDK exampels
-        private ManagedCameraList camList;
-        private ManagedInterfaceList interfaceList;
-        private ManagedSystem system;
+        //private ManagedCameraList camList;
+        //private ManagedInterfaceList interfaceList;
+        //private ManagedSystem system;
         
         //ManagedInterface 
 
@@ -45,90 +49,69 @@ namespace FLIRcamTest
 
         public void Connect()
             {
-            //camX = new Camera();
-
             //Referencing Acquisition_CSharp.cs example from Spinnaker SDK
-            //int startCam(IManagedCamera cam)
-            //{
 
-                int result = 0;
-                int level = 0;
+            int result = 0;
+            //cam = new FLIR();
+            ManagedSystem system = new ManagedSystem();
+            ManagedCameraList camList = new ManagedCameraList();
+            ManagedInterfaceList interfaceList = new ManagedInterfaceList();
+            IManagedInterface managedInterface = new ManagedInterface();
 
-                FileStream fileStream;
+            try
+                {
+                // terminate connection if no interface or cameras detected
+                if (camList.Count == 0 || interfaceList.Count == 0)
+                    {
+                    // End acquisition
+                    cam.EndAcquisition();
+
+                    // Deinitialise camera & system
+                    cam.DeInit();
+                    cam.Dispose();
+
+                    // Clear camera list before releasing system
+                    camList.Clear();
+
+                    // Clear interface list before releasing system
+                    interfaceList.Clear();
+
+                    // Release system
+                    system.Dispose();
+
+                    Console.WriteLine("No cameras detected!");
+                    Console.WriteLine("Press Enter to exit...");
+                    Console.ReadLine();
+                   
+                    }
 
                 // Following drawn from NodMapInfo_CSharp.cs example from Spinnaker SDK
-                try
+                if (camList.Count > 0 && camList.Count < 2)
                     {
-                    // check if permission to write to folder == True
-                    try
-                        {
-                        fileStream = new FileStream(@"fsTest.txt", FileMode.Create);
-                        fileStream.Close();
-                        File.Delete("fsTest.txt");
-                        }
-                    catch
-                        {
-                        Console.WriteLine("Failed to write to current folder, please check permissions.");
-                        Console.WriteLine("Press Enter to exit.");
-                        Console.ReadLine();
-                        return -1;
-                        }
-                        
-
-                    // RetrieveTL stream nodemap (immutable info of camera, serial number, vendor, model)
-                    Console.WriteLine("\n*** Printing TL Device NodeMap ***\n");
-                    INodeMap genTLNodeMap = cam.GetTLDeviceNodeMap();
-                    result = printCategoryNodeAndAllFeatures(genTLNodeMap.GetNode<ICategory>("Root"), level);
-
-                    // Retrieve TL stream nodemap (provide info on streaming performance)
-                    Console.WriteLine("*** PRINTING TL STREAM NODEMAP ***\n");
-                    INodeMap nodeMapTLStream = cam.GetTLStreamNodeMap();
-                    result = result | printCategoryNodeAndAllFeatures(nodeMapTLStream.GetNode<ICategory>("Root"), level);
-
-                    // Retrieve TL device nodemap and print device information
-                    INodeMap nodeMapTLDevice = cam.GetTLDeviceNodeMap();
-                    result = PrintDeviceInfo(nodeMapTLDevice);
+                    IManagedCamera cam = camList[0];
 
                     // Initialise camera
                     cam.Init();
 
                     // Retrieve GenICam nodemap (to configure camera -> image height, width, enable/ disable trigger mode
                     Console.WriteLine("*** PRINTING GENICAM NODEMAP ***\n");
-                    //INodeMap appLayerNodeMap = cam.GetNodeMap();
                     INodeMap nodeMap = cam.GetNodeMap();
-                    result = result | printCategoryNodeAndAllFeatures(appLayerNodeMap.GetNode<ICategory>("Root"), level);
 
-                    // Acquire images
-                    result = result | AcquireImages(cam, nodeMap, nodeMapTLDevice);
+                    // RetrieveTL stream nodemap (immutable info of camera, serial number, vendor, model)
+                    Console.WriteLine("\n*** Printing TL Device NodeMap ***\n");
+                    INodeMap genTLNodeMap = cam.GetTLDeviceNodeMap();
 
-                    // End acquisition
-                    cam.EndAcquisition();
+                    // Retrieve TL device nodemap and print device information; please see NodeMapInfo_CSharp example for additional information on TL device nodemaps
+                    INodeMap nodeMapTLDevice = cam.GetTLDeviceNodeMap();
+                    Console.Write("\tDevice {0} ");
 
-                    // Deinitialise camera
-                    cam.DeInit();
-                    cam.Dispose();
-
-                    }
-                catch (SpinnakerException ex)
-                    {
-                        Console.WriteLine("Error: {0}", ex.Message);
-                        result = -1;
-                    }
-                
-
-            // combine the following variable QueryInterface with the above startCam
-            int QueryInterface(IManagedInterface managedInterface)
-                {
-                int resultQuery = 0;
-
-                try
-                    {
                     // Retrieve TL nodemap from interface
                     INodeMap nodeMapInterface = managedInterface.GetTLNodeMap();
                     // Print interface display name (1. node is distinguished by type, related to its value's data type;
                     // 2. nodes to be checked for availability & read/writability prior to attempt to read or write)
                     IString iInterfaceDisplayName = nodeMapInterface.GetNode<IString>("InterfaceDisplayName");
 
+                    // acquire interface display name
                     if (iInterfaceDisplayName != null && iInterfaceDisplayName.IsReadable)
                         {
                         string interfaceDisplayName = iInterfaceDisplayName.Value;
@@ -140,58 +123,29 @@ namespace FLIRcamTest
                         Console.WriteLine("Interface display name not readable");
                         }
 
-                    // Retrieve list of interfaces from the system (retrieved from the systme object)
-                    ManagedSystem system = new ManagedSystem();
-                    ManagedInterfaceList interfaceList = system.GetInterfaces();
-                    Console.WriteLine("Number of interfaces detected: {0}\n", interfaceList.Count);
                     // Update list of cameras on the interface
                     managedInterface.UpdateCameras();
+
                     // Retrieve list of cameras from the interface
                     // Camera lists are constructed using list objects of IManagedCamera objects
-                    ManagedCameraList camList = managedInterface.GetCameras();
-                    // Return if no cameras detected
-                    if (camList.Count == 0)
-                        {
-                        Console.WriteLine("\tNo devices detected.\n");
-                        return 0;
-                        }
-                    else
-                        {
-                        Console.WriteLine("Number of cameras detected: {0}\n", camList.Count);
-                        }
+                    camList = managedInterface.GetCameras();
 
-                    // Print device vendor and model name for each camera on the interface
-                    for (int i = 0; i < camList.Count; i++)
-                        {
-                        //Select camera
-                        IManagedCamera cam = camList[i];
+                    // Retrieve list of interfaces from the system (retrieved from the systme object)
+                    interfaceList = system.GetInterfaces();
+                    Console.WriteLine("Number of interfaces detected: {0}\n", interfaceList.Count);
 
-                        // Retrieve TL device nodemap; please see NodeMapInfo_CSharp example for additional information on TL device nodemaps
-                        INodeMap nodeMapTLDevice = cam.GetTLDeviceNodeMap();
-                        Console.Write("\tDevice {0} ", i);
 
-                        // Dispose and clear managed camera
-                        cam.Dispose();
-                        camList.Clear();
-
-                        }
                     }
-                catch (SpinnakerException ex)
-                    {
-                    Console.WriteLine("Error " + ex.Message);
-                    resultQuery = -1;
-                    }
-                
-
-                return resultQuery;
-
 
                 }
-            cam.BeginAcquisition();
+            catch (SpinnakerException ex)
+                {
+                Console.WriteLine("Error: {0}", ex.Message);
+                throw new SpinnakerException(ex.Message);
+                }
 
             }
 
-            // why doesn't ximea cam code from James need to call on functions from within the corresponding SDK??
         public void Disconnect()
             {
             cam.EndAcquisition(); 
@@ -201,19 +155,8 @@ namespace FLIRcamTest
             system.Dispose();
             }
 
-        public WriteableBitmap CaptureImage(WriteableBitmap image)
-            {
-            try
-                {
-                //cam.GetImage(out image, 1000);
-                cam.BeginAcquisition();
-                cam.GetNextImage();
 
-                return image;
-                }
-            catch (Exception ex) { throw ex; }
-            }
-
+        // original code adapted from Ximea cam
         //public byte[] CaptureImage()
         //    {
         //    try
@@ -226,7 +169,22 @@ namespace FLIRcamTest
         //    catch (Exception ex) { throw ex; }
         //    }
 
-        public byte[] CaptureImage()
+        // Alternative version
+        //public WriteableBitmap CaptureImage(WriteableBitmap image)
+        //    {
+        //    try
+        //        {
+        //        //cam.GetImage(out image, 1000);
+        //        cam.BeginAcquisition();
+        //        cam.GetNextImage(1000);
+
+        //        return image;
+        //        }
+        //    catch (Exception ex) { throw ex; }
+        //    }
+
+        // modify code to output byte[] (WIP) 11-02-2025
+        public byte[] CaptureImage(IManagedCamera cam, INodeMap nodeMap,INodeMap nodeMapTLDevice)
             {
             //IManagedImage camImageUlong = new ManagedImage();
             try
@@ -243,12 +201,17 @@ namespace FLIRcamTest
                 IString iDeviceSerialNumber = nodeMapTLDevice.GetNode<IString>("DeviceSerialNumber");
                 deviceSerialNumber = iDeviceSerialNumber.Value;
 
+                // get expolsure time to set an appropriate timeout for GetNextImage
+                IFloat iExposureTime = nodeMap.GetNode<IFloat>("ExposureTime");
+                // convert exposure time retieved in us to ms for consistency with GetNextImage unit
+                double timeout = iExposureTime.Value / 1000 + 1000;
+
                 // Create ImageProcessor instance for post processing images
                 IManagedImageProcessor processor = new ManagedImageProcessor();
                 // Set default image processor color processing method
                 processor.SetColorProcessing(ColorProcessingAlgorithm.HQ_LINEAR);
                 
-                using (IManagedImage rawImage = cam.GetNextImage(1000))
+                using (IManagedImage rawImage = cam.GetNextImage((ulong) timeout))
                     {
                     if (rawImage.IsIncomplete)
                         {
@@ -272,10 +235,9 @@ namespace FLIRcamTest
                             }
 
                         }
-                    
+
                     }
 
-                
                 }
 
             catch (SpinnakerException ex) { throw ex; }
@@ -285,8 +247,7 @@ namespace FLIRcamTest
             {
             throw new NotImplementedException();
             }
-
-        // yet to further investigate & edit this _method_
+        // should work? 11-02-2025
         public void SetExposure(float exposure)
             {
             if (exposure < _exposureMinUs)
@@ -327,24 +288,45 @@ namespace FLIRcamTest
             throw new NotImplementedException();
             }
         
-        // not sure if GetNextImage gets the right image format
         public void SaveSnapshot(string filePath)
         {
             try
             {
-                WriteableBitmap image;
-                cam.GetNextImage(1000);
+                IEnum iAcquisitionMode = nodeMap.GetNode<IEnum>("AcquisitionMode");
+                IEnumEntry iAcquisitionModeSingle = iAcquisitionMode.GetEntryByName("SingleFrame");
+                // Set symbolic from entry node as new value for enumeration node
+                iAcquisitionMode.Value = iAcquisitionModeSingle.Symbolic;
 
+                cam.BeginAcquisition();
 
-                using (FileStream stream =
-            new FileStream(filePath, FileMode.Create))
-                {
-                    PngBitmapEncoder encoder = new PngBitmapEncoder();
-                    encoder.Frames.Add(BitmapFrame.Create(image));
-                    encoder.Save(stream);
-                }
+                using (IManagedImage rawImage = cam.GetNextImage(1000))
+                    {
+                    if (rawImage.IsIncomplete)
+                        {
+                        Console.WriteLine("Image incomplete: image status {0}...", rawImage.ImageStatus);
+                        }
+                    else
+                        {
+                        uint width = rawImage.Width;
+                        uint height = rawImage.Height;
+
+                        // Create ImageProcessor instance for post processing images
+                        IManagedImageProcessor processor = new ManagedImageProcessor();
+                        // Set default image processor color processing method
+                        processor.SetColorProcessing(ColorProcessingAlgorithm.HQ_LINEAR);
+                        // convert rawImage to mono8
+                        using (IManagedImage convertedImage = processor.Convert(rawImage, PixelFormatEnums.Mono8))
+                            {
+                            string filename = "mono8Image-";
+                            filename = filename + ".jpg";
+                            convertedImage.Save(filename);
+                            Console.WriteLine("Imaged saved at {0}\n", filename);
+                            }
+                        }
+                    }
+
             }
-            catch (Exception ex) { throw ex; }
+            catch (SpinnakerException ex) { throw ex; }
         }
 
         ~FLIR()   // destructor to free up resources

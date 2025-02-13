@@ -16,7 +16,7 @@ namespace FLIRcamTest
 
         void UpdateParameters(); // get the width, height bit depth from the camera
 
-        WriteableBitmap CaptureImage(WriteableBitmap image); // captures a single frame
+        WriteableBitmap CaptureImage(WriteableBitmap image); // captures a single frame; for Spinnaker SDK camera
 
         byte[] CaptureImage();
 
