@@ -16,13 +16,16 @@ using Spinnaker;
 using System.Windows.Media.Media3D;
 using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
+using System.Collections;
+using DrawingColor = System.Drawing.Color;
 
 // https://flir.custhelp.com/app/answers/detail/a_id/4327/~/flir-spinnaker-sdk---getting-started-with-the-spinnaker-sdk
+// see C:\Program Files\Teledyne\Spinnaker\doc\Managed for API reference
+//
 namespace FLIRcamTest
     {
     public class FLIR : Cameras
         {
-        //FLIR cam;
         private INodeMap nodeMap;
         private INodeMap nodeMapTLDevice;
         //private readonly ManagedCamera cam;  // the class version, relating directly under the SDK's class
@@ -31,6 +34,7 @@ namespace FLIRcamTest
         //private ManagedInterfaceList interfaceList;
         //private ManagedSystem system;
         
+
         //ManagedInterface 
 
         // Setting the properties
@@ -51,8 +55,6 @@ namespace FLIRcamTest
             {
             //Referencing Acquisition_CSharp.cs example from Spinnaker SDK
 
-            int result = 0;
-            //cam = new FLIR();
             ManagedSystem system = new ManagedSystem();
             ManagedCameraList camList = new ManagedCameraList();
             ManagedInterfaceList interfaceList = new ManagedInterfaceList();
@@ -134,6 +136,23 @@ namespace FLIRcamTest
                     interfaceList = system.GetInterfaces();
                     Console.WriteLine("Number of interfaces detected: {0}\n", interfaceList.Count);
 
+                    // set acquisiton mode to single frame
+                    IEnum iAcquisitionMode = nodeMap.GetNode<IEnum>("AcquisitionMode");
+                    if (iAcquisitionMode == null || !iAcquisitionMode.IsWritable || !iAcquisitionMode.IsReadable)
+                        {
+                        Console.WriteLine("Unable to set acquisition mode to single (node retrieval). Aborting...\n");
+                        throw new Exception();
+                        }
+                    IEnumEntry iAcquisitionModeSingle = iAcquisitionMode.GetEntryByName("SingleFrame");
+                    if (iAcquisitionModeSingle == null || !iAcquisitionModeSingle.IsReadable)
+                        {
+                        Console.WriteLine(
+                            "Unable to set acquisition mode to single (enum entry retrieval). Aborting...\n");
+                        throw new Exception();
+                        }
+                    // Set symbolic from entry node as new value for enumeration node
+                    iAcquisitionMode.Value = iAcquisitionModeSingle.Symbolic;
+
 
                     }
 
@@ -156,43 +175,26 @@ namespace FLIRcamTest
             }
 
 
-        // original code adapted from Ximea cam
-        //public byte[] CaptureImage()
-        //    {
-        //    try
-        //        {
-        //        //cam.GetImage(out byte[] byteArrayIn, 1000);
-        //        cam.BeginAcquisition();
-
-        //        return byteArrayIn;
-        //        }
-        //    catch (Exception ex) { throw ex; }
-        //    }
-
-        // Alternative version
-        //public WriteableBitmap CaptureImage(WriteableBitmap image)
-        //    {
-        //    try
-        //        {
-        //        //cam.GetImage(out image, 1000);
-        //        cam.BeginAcquisition();
-        //        cam.GetNextImage(1000);
-
-        //        return image;
-        //        }
-        //    catch (Exception ex) { throw ex; }
-        //    }
-
         // modify code to output byte[] (WIP) 11-02-2025
-        public byte[] CaptureImage(IManagedCamera cam, INodeMap nodeMap,INodeMap nodeMapTLDevice)
+        public byte[] CaptureImage()
             {
-            //IManagedImage camImageUlong = new ManagedImage();
             try
                 {
                 // Retrieve enumeration node from nodemap
                 IEnum iAcquisitionMode = nodeMap.GetNode<IEnum>("AcquisitionMode");
+                if (iAcquisitionMode == null || !iAcquisitionMode.IsWritable || !iAcquisitionMode.IsReadable)
+                    {
+                    Console.WriteLine("Unable to set acquisition mode to single (node retrieval). Aborting...\n");
+                    throw new Exception();
+                    }
                 // Retrieve entry node from enumeration node
                 IEnumEntry iAcquisitionModeContinuous = iAcquisitionMode.GetEntryByName("Continuous");
+                if (iAcquisitionModeContinuous == null || !iAcquisitionModeContinuous.IsReadable)
+                    {
+                    Console.WriteLine(
+                        "Unable to set acquisition mode to single (enum entry retrieval). Aborting...\n");
+                    throw new Exception();
+                    }
                 // Set symbolic from entry node as new value for enumeration node
                 iAcquisitionMode.Value = iAcquisitionModeContinuous.Symbolic;
                 
@@ -200,6 +202,22 @@ namespace FLIRcamTest
                 String deviceSerialNumber = "";
                 IString iDeviceSerialNumber = nodeMapTLDevice.GetNode<IString>("DeviceSerialNumber");
                 deviceSerialNumber = iDeviceSerialNumber.Value;
+
+                IEnum iExposureAuto = nodeMap.GetNode<IEnum>("ExposureAuto");
+                if (iExposureAuto == null || !iExposureAuto.IsReadable || !iExposureAuto.IsWritable)
+                    {
+                    Console.WriteLine("Unable to disable automatic exposure (enum retrieval). Aborting...\n");
+                    throw new InvalidOperationException("Unable to disable automatic exposure.");
+                    }
+
+                // turn auto exposure mode to OFF
+                IEnumEntry iExposureAutoOff = iExposureAuto.GetEntryByName("Off");
+                if (iExposureAutoOff == null || !iExposureAutoOff.IsReadable)
+                    {
+                    Console.WriteLine("Unable to disable automatic exposure (entry retrieval). Aborting...\n");
+                    throw new InvalidOperationException("Unable to disable automatic exposure.");
+                    }
+                iExposureAuto.Value = iExposureAutoOff.Value;
 
                 // get expolsure time to set an appropriate timeout for GetNextImage
                 IFloat iExposureTime = nodeMap.GetNode<IFloat>("ExposureTime");
@@ -262,8 +280,18 @@ namespace FLIRcamTest
                 exposureUs = exposure;
                 // acquire auto exposure mode
                 IEnum iExposureAuto = nodeMap.GetNode<IEnum>("ExposureAuto");
+                if (iExposureAuto == null || !iExposureAuto.IsReadable || !iExposureAuto.IsWritable)
+                    {
+                    Console.WriteLine("Unable to disable automatic exposure (enum retrieval). Aborting...\n");
+                    throw new InvalidOperationException("Unable to disable automatic exposure.");
+                    }
                 // turn auto exposure mode to OFF
                 IEnumEntry iExposureAutoOff = iExposureAuto.GetEntryByName("Off");
+                if (iExposureAutoOff == null || !iExposureAutoOff.IsReadable)
+                    {
+                    Console.WriteLine("Unable to disable automatic exposure (entry retrieval). Aborting...\n");
+                    throw new InvalidOperationException("Unable to disable automatic exposure.");
+                    }
                 iExposureAuto.Value = iExposureAutoOff.Value;
                 //// set exposure time manually
                 //cam.SetParam(PRM.EXPOSURE, exposureUs);   // adapt this line then delete
@@ -287,15 +315,139 @@ namespace FLIRcamTest
             {
             throw new NotImplementedException();
             }
-        
-        public void SaveSnapshot(string filePath)
+
+        public (int zStack, int width, int height, float maxIntensity, int maxX, int maxY, int FWHM_Y) FindFWHM(string imagePath)
+            {
+            
+            // load in the images from the folder
+            FileInfo imageInfo = new FileInfo(imagePath);
+
+            // find number of images in the folder using LINQ (in indices instead of (um))
+            int zStack = Directory.EnumerateFiles(imagePath).Count();
+
+            // determine image width and height
+            Bitmap image = new Bitmap(imagePath);
+            var width = image.Width;
+            var height = image.Height;
+            float[,] intensityMatrix = new float[height, width];        // [row, column] 
+
+            // acquire the max X & Y intensity of a single image
+            float maxIntensity = 0;
+            int maxX = 0;
+            int maxY = 0;
+            
+            for (int y = 0; y < image.Height; y++)
+                {
+                for (int x = 0; x< image.Width; x++)
+                    {
+                    // get pixel colour of the grayscale value
+                    DrawingColor pixelColor = image.GetPixel(x, y);
+
+                    // if image is already in grayscale, any of the R,G,B channel in grayscale images can be used
+                    float grayValue = pixelColor.R;
+                    intensityMatrix[y,x] = grayValue;
+
+
+                    //check which pixel has highest intensity
+                    if (grayValue > maxIntensity)
+                        {
+                        maxIntensity = grayValue;
+                        maxX = x;
+                        maxY = y;
+                        }
+
+                    }
+                }
+
+            // determine FWHM of the image (assuming beam is circular and therefore rotationally symmetrical)
+            float halfMax = (maxIntensity / 2);
+            
+            int idxY0 = -1;     // -1 indicates the index in Y not found yet
+            int idxY1 = -1;     // 2nd value to be >= halfMax
+
+            for (int y=0; y < height; y++)
+                {
+                if (intensityMatrix[y, maxX] >= halfMax)
+                    {
+                    idxY0 = y;  // first y value >= halfMax, aka top side of the beam profile
+                    break;
+                    }
+                }
+
+            for (int y=height - 1; y >= 0; y--)
+                {
+                if (intensityMatrix[y, maxX] >= halfMax)
+                    {
+                    idxY1 = y;  // second y value >= halfMax, aka bottom side of the beam profile
+                    break;
+                    }
+                }
+
+
+            // initialise FWHM_Y
+            int FWHM_Y = 0;
+            try
+                {
+                FWHM_Y = (idxY0 != -1 && idxY1 != -1) ? (idxY1 - idxY0 + 1) : 0;
+                }
+            catch (Exception e)
+                {
+                Console.WriteLine("Error: {0}", e.Message);
+                throw new Exception(e.Message);
+                }
+
+            return (zStack, width, height, maxIntensity, maxX, maxY, FWHM_Y);
+            }
+
+        // WIP 19-02-2025
+        public int FindFocalPlane(string filePath)
+            {
+            // rudimentary implementation of loading image files from a directory, need further work
+            // https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.createdirectory?view=net-9.0
+            //DirectoryInfo makeFolder = Directory.CreateDirectory(@"c:\imagesFolder");   // doesnt not account for checking if folder existed
+
+            // curating list of image paths for all images in the folder
+            string[] imagePath = Directory.GetFiles(filePath);
+
+            // find number of images in the folder using LINQ (in indices instead of (um))
+            int imageCount = Directory.EnumerateFiles(@"c:\imagesFolder").Count();
+
+            int[,] FWHMarray = new int[imageCount,imageCount];
+
+            int zFocalPlane = 0;
+            int minFWHM = 10000; // arbitrary large value for comparison to find smallest value
+
+            // acquiring FWHM value of each image & determine which image index has smallest FWHM value
+            for (int imgIdx = 1; imgIdx <= imageCount; imgIdx++)
+                {
+                // find FWHM of each of the images in the stack
+                FWHMarray[imgIdx, 0] = FindFWHM(imagePath[imgIdx]).FWHM_Y;
+                FWHMarray[imgIdx, 1] = imgIdx - 1;
+
+                }
+                
+            for (int z = 1; z <= imageCount; z++) {
+                // find the image index among the stack with smallest FWHM
+                int currentFWHM = FWHMarray[z, 0];
+
+                // update values only if it's less than temporary current minFWHM
+                if (FWHMarray[z,0] < minFWHM)
+                    {
+                    minFWHM = currentFWHM;
+                    zFocalPlane = z;
+                    // still requires correlating this zFocalPlane to the actual Z stage position (relative and absolute)
+                    }
+                
+                }
+
+            return zFocalPlane;
+            }
+
+        // static int AcquireImages(IManagedCamera cam, INodeMap nodeMap,INodeMap nodeMapTLDevice)  
+        public string SaveSnapshot(string filePath)
         {
             try
             {
-                IEnum iAcquisitionMode = nodeMap.GetNode<IEnum>("AcquisitionMode");
-                IEnumEntry iAcquisitionModeSingle = iAcquisitionMode.GetEntryByName("SingleFrame");
-                // Set symbolic from entry node as new value for enumeration node
-                iAcquisitionMode.Value = iAcquisitionModeSingle.Symbolic;
 
                 cam.BeginAcquisition();
 
@@ -319,14 +471,16 @@ namespace FLIRcamTest
                             {
                             string filename = "mono8Image-";
                             filename = filename + ".jpg";
-                            convertedImage.Save(filename);
+                            convertedImage.Save(filePath + filename);   // for post process
                             Console.WriteLine("Imaged saved at {0}\n", filename);
                             }
                         }
                     }
-
+                
             }
             catch (SpinnakerException ex) { throw ex; }
+
+            return filePath;
         }
 
         ~FLIR()   // destructor to free up resources

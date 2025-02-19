@@ -16,8 +16,8 @@ using System.IO;
 //using SpinnakerNET;
 //using SpinnakerNET.GenApi;
 
-namespace FLIRcamMain
-{
+namespace FLIRcamTest
+    {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
@@ -26,9 +26,7 @@ namespace FLIRcamMain
         public MainWindow()
         {   
             // Create camera objects
-            private readonly FLIR FLIR = new FLIR();
-
-            private Cameras Cam = null;
+            private readonly FLIR cam = new FLIR();
         }
 
         private void FLIRConnectButton_Click(object sender, RoutedEventArgs e)
@@ -54,7 +52,7 @@ namespace FLIRcamMain
 
         private void exposureButton_Click(object sender, RoutedEventArgs e)
         {
-            FLIR.Exposure(double.Parse(exposureTextBox.Text));
+            FLIR.SetExposure(double.Parse(exposureTextBox.Text));
         }
 
         private void maxValCheckBox_Checked(object sender, RoutedEventArgs e)
